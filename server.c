@@ -16,7 +16,7 @@ void error(const char *msg) {
 int main(int argc, char *argv[]) {
     int sockfd, newsockfd, portNum;
     socklen_t clilen;
-    char buffer[256];
+    char buffer[1024];
     struct sockaddr_in server_addr, client_addr;
     int n;
 
@@ -46,11 +46,31 @@ int main(int argc, char *argv[]) {
     if (newsockfd < 0) 
         error("ERROR on accept");
 
-    bzero(buffer, 256);
-    n = read(newsockfd, buffer, 255);
+    bzero(buffer, 1024);
+    n = read(newsockfd, buffer, 1023);
     if (n < 0) error("ERROR reading from socket");
 
-    printf("Here is the message: %s\n", buffer);
+    char command[512];
+    sprintf(command, "java -cp javase.jar:core.jar com.google.zxing.client.j2se.CommandLineRunner %s", buffer);
+
+    FILE *fp = popen(command, "r");
+    if (fp == NULL) {
+        error("Failed to run command");
+    }
+    int count = 0;
+    while (fgets(buffer, 1023, fp) != NULL) {
+        count ++;
+        if (count == 3) {
+            n = write(newsockfd, buffer, strlen(buffer));
+            if (n < 0) {
+                perror("ERROR writing to socket");
+                break;
+        }
+        }
+    }
+
+    pclose(fp);
+
     close(newsockfd);
     close(sockfd);
     return 0; 

@@ -44,9 +44,7 @@ int main(int argc, char * argv[]) {
     if (connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) 
         error("ERROR connecting");
 
-    printf("Please enter the message: ");
-    bzero(buffer, 256);
-    fgets(buffer, 255, stdin);
+    strcpy(buffer, "qr_code.png"); 
 
     n = write(sockfd, buffer, strlen(buffer));
     if (n < 0) 
