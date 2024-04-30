@@ -9,6 +9,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <sys/time.h>
+#include <time.h>
 
 #define BUFFER_SIZE 1024
 #define MAX_FILE_SIZE 4294967295
@@ -34,6 +35,31 @@ void error(const char *msg) {
 }
 
 void *handle_client(int newsockfd) {
+    //Used for logging
+    time_t rawtime;
+    struct tm *timeinfo;
+    char timeBuffer[20];
+    time(&rawtime);
+    timeinfo = localtime(&rawtime);
+    strftime(timeBuffer, sizeof(timeBuffer), "%Y-%m-%d %H:%M:%S", timeinfo);
+    
+    // Get client IP address
+    struct sockaddr_in client_addr;
+    socklen_t addr_len = sizeof(client_addr);
+    getpeername(newsockfd, (struct sockaddr *)&client_addr, &addr_len);
+    char *client_ip = inet_ntoa(client_addr.sin_addr);
+
+    FILE *logFile = fopen("server_log.txt", "a");
+    if (logFile == NULL) {
+        error("Error opening log file");
+        return NULL;
+    }
+
+    // Log connection information
+    fprintf(logFile, "%s %s Connected\n", timeBuffer, client_ip);
+    
+ 
+    //Used for rate limiting
     check_requests();
     
     if (requests_count >= requests_per_minute) {
@@ -42,7 +68,9 @@ void *handle_client(int newsockfd) {
         return NULL;
     }
 
-    requests_count++;
+    request_count++;
+
+    //
 
     for (;;) {
     unsigned int fileSize;
@@ -77,6 +105,7 @@ void *handle_client(int newsockfd) {
     char *buffer = malloc(fileSize + 1);
     if (buffer == NULL) {
         close(newsockfd);
+        fprintf(logFile, "%s %s Memory allocation failed\n", timeBuffer, client_ip);
         error("Memory allocation failed");
         return NULL;
     }
@@ -85,6 +114,7 @@ void *handle_client(int newsockfd) {
     if (n < fileSize) {
         free(buffer);
         close(newsockfd);
+        fprintf(logFile, "%s %s ERROR reading full data from socket\n", timeBuffer, client_ip);
         error("ERROR reading full data from socket");
         return NULL;
     }
@@ -92,9 +122,11 @@ void *handle_client(int newsockfd) {
     if (file == NULL) {
         free(buffer);
         close(newsockfd);
+        fprintf(logFile, "%s %s Failed to open file for writing\n", timeBuffer, client_ip);
         error("Failed to open file for writing");
         return NULL;
     }
+
     fwrite(buffer, 1, fileSize, file);
     fclose(file);
     free(buffer);
@@ -104,6 +136,7 @@ void *handle_client(int newsockfd) {
     FILE *fp = popen(command, "r");
     if (fp == NULL) {
         close(newsockfd);
+        fprintf(logFile, "%s %s Failed to run command\n", timeBuffer, client_ip);
         error("Failed to run command");
         return NULL;
     }
@@ -123,7 +156,9 @@ void *handle_client(int newsockfd) {
     pclose(fp);
     }
 
+    fflush(logFile); // Ensure the log is written immediately
     close(newsockfd);
+    fclose(log_file);
     return NULL;
 
     }
