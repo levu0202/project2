@@ -13,12 +13,37 @@
 #define BUFFER_SIZE 1024
 #define MAX_FILE_SIZE 4294967295
 
+//Used for rate limit
+int request_count = 0;
+time_t last_request_time = 0;
+int rate_limit = 3;
+
+//Used for rate limit
+void check_requests() {
+    time_t current_time = time(NULL);
+    
+    if (current_time - last_request_time >= 60) {
+        requests_count = 0;
+        last_request_time = current_time;
+    }
+}
+
 void error(const char *msg) {
     perror(msg);
     exit(1);
 }
 
 void *handle_client(int newsockfd) {
+    check_requests();
+    
+    if (requests_count >= requests_per_minute) {
+        log_activity("Rate limit exceeded. Discarding request", client_addr);
+        close(newsockfd);
+        return NULL;
+    }
+
+    requests_count++;
+
     for (;;) {
     unsigned int fileSize;
     int n = read(newsockfd, &fileSize, sizeof(fileSize));
@@ -115,8 +140,9 @@ int main(int argc, char *argv[]) {
         error("Error opening socket");
     }
 
-    int max_clients = atoi(argv[2]);
-    int timeout_sec = atoi(argv[3]); 
+    int rate_limit = atoi(argv[2]);
+    int max_clients = atoi(argv[3]);
+    int timeout_sec = atoi(argv[4]); 
 
     struct sockaddr_in server_addr, client_addr;
     memset(&server_addr, '\0',
